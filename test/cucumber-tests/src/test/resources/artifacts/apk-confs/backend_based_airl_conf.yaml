@@ -11,7 +11,7 @@ aiProvider:
   apiVersion: “2024.06.01”
 endpointConfigurations:
   production:
-    - endpoint: "http://llm-service:80"
+    - endpoint: "http://llm-service.apk-integration-test.svc.cluster.local:80"
       aiRatelimit:
         enabled: true
         token:

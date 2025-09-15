@@ -957,7 +957,7 @@ spec:
   type: ClusterIP
 
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: llm-route-subs
@@ -966,7 +966,7 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: wso2-apk-default
+      name: wso2-kgw-default
       namespace: apk-integration-test
       sectionName: httpslistener
   hostnames:
@@ -1076,7 +1076,7 @@ spec:
   type: ClusterIP
 
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: llm-route-header
@@ -1085,7 +1085,7 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: wso2-apk-default
+      name: wso2-kgw-default
       namespace: apk-integration-test
       sectionName: httpslistener
   hostnames:
@@ -1154,7 +1154,7 @@ spec:
   type: ClusterIP
 
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: llm-route
@@ -1163,20 +1163,41 @@ spec:
   parentRefs:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      name: wso2-apk-default
+      name: wso2-kgw-default
       namespace: apk-integration-test
       sectionName: httpslistener
   hostnames:
     - default.gw.wso2.com
   rules:
     - matches:
-        - path:
+        - method: GET
+          path:
             type: PathPrefix
-            value: /
+            value: /llm-api/v1.0.0
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: dp.wso2.com
+            kind: RoutePolicy
+            name: llm-policy
+        - type: URLRewrite
+          urlRewrite:
+            hostname: llm-service.apk-integration-test.svc.cluster.local
       backendRefs:
-        - group: dp.wso2.com
+        - group: gateway.envoyproxy.io
           kind: Backend
           name: llm-backend
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: llm-backend
+  namespace: apk-integration-test
+spec:
+  endpoints:
+    - fqdn:
+        hostname: llm-service.apk-integration-test.svc.cluster.local
+        port: 80
 ---
 apiVersion: v1
 kind: Service
@@ -1506,3 +1527,98 @@ spec:
           value: "$.usage.completion"
         - key: TotalTokenPath
           value: "$.usage.total"
+---
+apiVersion: dp.wso2.com/v2alpha1
+kind: RoutePolicy
+metadata:
+  name: llm-policy
+  namespace: apk-integration-test
+spec:
+  requestMediation:
+    - policyName: AIProvider
+      policyID: ""
+      policyVersion: v1.0.0
+      parameters:
+        - key: Enabled
+          value: "true"
+        - key: ProviderName
+          value: AzureAI
+        - key: SupportedModels
+          value: '{"gpt-4o", "gpt-3.5", "gpt-4.5"}'
+        - key: requestModel
+          value: (?<=model/)[a-zA-Z0-9.:-]+(?=/)
+        - key: responseModel
+          value: (?<=model/)[a-zA-Z0-9.:-]+(?=/)
+        - key: PromptTokenPath
+          value: "$.usage.prompt_tokens"
+        - key: CompletionTokenPath
+          value: "$.usage.completion_tokens"
+        - key: TotalTokenPath
+          value: "$.usage.total_tokens"
+---
+apiVersion: dp.wso2.com/v2alpha1
+kind: RoutePolicy
+metadata:
+  name: ai-provider-bf39486cf439fd0d1b4e9f565a495e84ee2ba1bb
+  namespace: apk-integration-test
+spec:
+  requestMediation:
+    - policyName: AIProvider
+      policyID: ""
+      policyVersion: v1.0.0
+      parameters:
+        - key: Enabled
+          value: "true"
+        - key: ProviderName
+          value: llm-provider-1
+        - key: APIVersion
+          value: "2024.06.01"
+        - key: PromptTokenPath
+          value: "$.usage.prompt_tokens"
+        - key: CompletionTokenPath
+          value: "$.usage.completion_tokens"
+        - key: TotalTokenPath
+          value: "$.usage.total_tokens"
+# ---
+# apiVersion: dp.wso2.com/v2alpha1
+# kind: RoutePolicy
+# metadata:
+#   name: llm-backend-rl
+#   namespace: apk-integration-test
+# spec:
+#   requestMediation:
+#     - policyName: AIRateLimitPolicy
+#       policyID: ""
+#       policyVersion: v1.0.0
+#       parameters:
+#         - key: Enabled
+#           value: "true"
+#         - key: ProviderName
+#           value: AzureAI
+#         - key: SupportedModels
+#           value: '{"gpt-4o", "gpt-3.5", "gpt-4.5"}'
+#         - key: requestModel
+#           value: (?<=model/)[a-zA-Z0-9.:-]+(?=/)
+#         - key: responseModel
+#           value: (?<=model/)[a-zA-Z0-9.:-]+(?=/)
+#         - key: PromptTokenPath
+#           value: "$.usage.prompt_tokens"
+#         - key: CompletionTokenPath
+#           value: "$.usage.completion_tokens"
+#         - key: TotalTokenPath
+#           value: "$.usage.total_tokens"
+# spec:
+#   override:
+#     organization: default
+#     tokenCount:
+#       unit: Minute
+#       requestTokenCount: 5000
+#       responseTokenCount: 10000
+#       totalTokenCount: 15000
+#     requestCount:
+#       requestsPerUnit: 6000
+#       unit: Minute
+#   targetRef:
+#     kind: Backend
+#     name: llm-backend
+#     group: gateway.networking.k8s.io
